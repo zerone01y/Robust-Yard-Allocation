@@ -5,17 +5,13 @@ import json
 solu_col = collections.namedtuple("AssignmentPlan",
                                   ["X", "Y", "z", "C", "ks"])
 
-pricingSolverOptions = collections.namedtuple("Pricing_options",
-                                              ["Method", "Cutoff", "Threads",
+pricing_solver_options = collections.namedtuple("Pricing_options",
+                                                ["Method", "Cutoff", "Threads",
                                                "PoolSearchMode", "MIPGap",
                                                "PoolSolutions", "TimeLimit"])
 
-stabilizedStrategy = collections.namedtuple("Stabilized_Strategy",
-                                            ["name", "penalty", "delta"])
-
-cut_element = collections.namedtuple("cut", ["q", "j", "bound", "sign"])
-cut_key = collections.namedtuple("cut", ["q", "j", "sign"])
-# (right: >=, sign="+", plus; left: <=, sign="-")
+stabilized_strategy = collections.namedtuple("Stabilized_Strategy",
+                                             ["name", "penalty", "delta"])
 
 class Node_data():
     UB_info = (np.inf, 0)
@@ -162,14 +158,31 @@ class DefaultDict(dict):
                 new_col[i] = other * self[i]
             return new_col
 
-class sub_template(DefaultDict):
-    @property
-    def template_output(self):
-        for i in self.values():
-            if round(i, 1) not in [0, 1]:
-                raise ValueError()
-        z = []
-        for i in sorted(self.sparsed()):
-            z.append(i[1])
-        return tuple(z)
+def sparsed_vars(*args, **kwargs):
+    """return sparsed variables (e.g. z, x, y)
+    """
+    # filter values, e.g. lambda v: v>0.5.
+    # Can be used to round fractional solutions
+    value_filter = kwargs.pop("filter", lambda v: v)
+
+    if len(args) >= 2:
+        inst = args[0]
+        vars = args[1:]
+
+        lbd = {}
+        for var in vars:
+            lbd[var] = inst.component(var).extract_values()
+            lbd[var] = DefaultDict({i: j for (i, j) in lbd[var].items() if value_filter(j)})
+        if len(vars) == 1:
+            return lbd[vars[0]]
+    elif len(args) == 1:
+        import pyomo.core.base as pcb
+        var = args[0]
+        if isinstance(var, pcb.var.Var):
+            lbd = DefaultDict({i: j for (i, j) in var.extract_values().items() if value_filter(j)})
+        elif isinstance(var, pcb.param.Param):
+            lbd = DefaultDict(var.extract_values_sparse())
+        else:
+            raise Exception("Wrong value type for sparsed_vars")
+    return lbd
 
